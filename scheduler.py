@@ -7,8 +7,8 @@ from twilio.rest import Client
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-TWILIO_SID = os.getenv("TWILIO_SID)
-TWILIO_TOKEN = os.getenv("TWILIO_TOKEN)
+TWILIO_SID = os.getenv("TWILIO_SID")
+TWILIO_TOKEN = os.getenv("TWILIO_TOKEN")
 TWILIO_WHATSAPP_NUMBER = "whatsapp:+14155238886"
 
 MEET_LINKS = {
