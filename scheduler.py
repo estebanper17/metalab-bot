@@ -1,10 +1,16 @@
 import os
 import requests
 from datetime import datetime, timedelta
+from dotenv import load_dotenv # <--- Asegúrate de tener este import
 from apscheduler.schedulers.background import BackgroundScheduler
 from twilio.rest import Client
 
-load_dotenv() # Esto carga las variables del archivo .env
+# Cargamos la bóveda por si ejecutamos este archivo por separado
+load_dotenv() 
+
+# --- CREDENCIALES ---
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # --- CREDENCIALES ---
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
