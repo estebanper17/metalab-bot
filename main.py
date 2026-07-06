@@ -10,6 +10,7 @@ import models
 from calendar_engine import obtener_horarios_disponibles, formatear_slots_para_whatsapp
 from scheduler import programar_recordatorios_clase
 from gemini_service import analizar_mensaje_con_gemini
+from dotenv import load_dotenv # <--- Asegúrate de tener este import
 
 load_dotenv() # Esto carga las variables del archivo .env
 
