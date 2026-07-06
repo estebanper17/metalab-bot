@@ -1,0 +1,11 @@
+# Entorno virtual
+venv/
+
+# Archivos compilados de Python
+__pycache__/
+
+# Base de datos local
+*.db
+
+# Bóveda de credenciales
+.env
