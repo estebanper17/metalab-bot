@@ -1,3 +1,4 @@
+import os
 import requests
 from datetime import datetime
 from fastapi import FastAPI, Form, Depends
