@@ -132,7 +132,7 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
             twiml.message(introduccion + menu_horarios)
             
             # CORRECCIÓN AQUÍ: Imprime el texto completo para validar el contexto
-            # Reemplaza tu actual print de debug por este:
+            print(f"\n[DEBUG INTEGRACIÓN GEMINI - TRANSFERENCIA A CALENDARIO]:\n{introduccion}{menu_horarios}")
             print(f"\n[DEBUG CALENDARIO DETALLADO]")
             print(f"Hora Servidor (UTC): {datetime.utcnow()}")
             print(f"Hora Local (Ajustada): {datetime.utcnow() - timedelta(hours=6)}")
