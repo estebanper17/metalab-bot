@@ -12,6 +12,7 @@ from calendar_engine import obtener_horarios_disponibles, formatear_slots_para_w
 from scheduler import programar_recordatorios_clase
 from gemini_service import analizar_mensaje_con_gemini
 from dotenv import load_dotenv # <--- Asegúrate de tener este import
+from sqlalchemy.orm.attributes import flag_modified
 
 load_dotenv() # Esto carga las variables del archivo .env
 
@@ -76,6 +77,7 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
         datos["historial"] = datos["historial"][-10:]
         
         cliente.datos_temporales = datos
+        flag_modified(cliente, "datos_temporales")
         db.commit()
 
         if intencion == "CONVERSAR":
@@ -168,24 +170,32 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
             programar_recordatorios_clase(From, nueva_cita.materia, fecha_hora_dt)
             
         else:
-            # VÁLVULA DE ESCAPE CON AVISO ESTRICTO
-            analisis = analizar_mensaje_con_gemini(text_limpio, cliente.datos_temporales)
+            # VÁLVULA DE ESCAPE: El usuario respondió con texto en lugar de un número
+            
+            # 1. Le decimos a Gemini la verdad sobre los horarios para que no alucine
+            horarios_legibles = [datetime.fromisoformat(s).strftime('%d/%b a las %I:00 %p') for s in slots_ofrecidos]
+            datos["contexto_calendario"] = f"NOTA DEL SISTEMA: El calendario real solo tiene estos espacios: {horarios_legibles}. Explícale esto al usuario de forma amable."
+            
+            analisis = analizar_mensaje_con_gemini(text_limpio, datos)
             respuesta_bot = analisis.get("respuesta_cliente", "")
             
+            # 2. Guardamos la memoria
             if "historial" not in datos: datos["historial"] = []
             datos["historial"].append({"autor": "Usuario", "texto": text_limpio})
             datos["historial"].append({"autor": "Asistente", "texto": respuesta_bot})
             datos["historial"] = datos["historial"][-10:]
             
+            # 3. ¡LA LLAVE DE SALIDA! Regresamos a modo conversacional
+            cliente.estado_actual = "ESPERANDO_SERVICIO"
             cliente.datos_temporales = datos
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(cliente, "datos_temporales")
             db.commit()
             
-            # Forzamos al usuario visualmente a usar el menú numérico
-            respuesta_final = respuesta_bot + "\n\n⚠️ *IMPORTANTE: Para que el sistema registre tu horario, por favor responde únicamente con el NÚMERO de la opción que elegiste de la lista.*"
-            twiml.message(respuesta_final)
+            twiml.message(respuesta_bot)
             print(f"\n[DEBUG GEMINI - VÁLVULA DE ESCAPE]:\n{respuesta_bot}")
             
-        return Response(content=str(twiml), media_type="application/xml")
+            return Response(content=str(twiml), media_type="application/xml")
 
 
     elif estado_actual == "ATENCION_MANUAL":
