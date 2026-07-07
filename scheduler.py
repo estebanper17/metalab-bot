@@ -52,7 +52,9 @@ def enviar_notificaciones_clase(telefono_cliente: str, materia: str, hora_clase_
             body=mensaje_wa,
             to=telefono_cliente
         )
-        print(f"✅ Recordatorio enviado a WhatsApp del alumno: {telefono_cliente}")
+        # 👉 NUEVO: Imprimimos en consola el mensaje exacto que salió hacia WhatsApp
+        print(f"\n[DEBUG SCHEDULER - WHATSAPP ENVIADO A {telefono_cliente}]:\n{mensaje_wa}")
+        
     except Exception as e:
         print(f"❌ Error enviando WhatsApp de recordatorio: {e}")
 
