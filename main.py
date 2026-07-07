@@ -55,13 +55,21 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
     # FASE CONVERSACIONAL INTEGRADA CON GEMINI (INICIO / ESPERANDO_SERVICIO)
     # =========================================================================
     if estado_actual in ["INICIO", "ESPERANDO_SERVICIO"]:
-        analisis = analizar_mensaje_con_gemini(text_limpio, cliente.datos_temporales)
+        # 1. TRAER LOS HORARIOS REALES ANTES DE QUE GEMINI GENERE SU RESPUESTA
+        slots_disponibles = obtener_horarios_disponibles(db, dias_a_futuro=7)
+        horarios_legibles = [slot.strftime('%d/%b a las %I:00 %p') for slot in slots_disponibles[:8]]
+        
+        # 2. Recuperamos los datos temporales e inyectamos el estado real del calendario
+        datos = dict(cliente.datos_temporales)
+        datos["calendario_disponible"] = horarios_legibles # <--- Gemini leerá esto instantáneamente
+        
+        # 3. Ahora sí, llamamos a Gemini con los ojos abiertos
+        analisis = analizar_mensaje_con_gemini(text_limpio, datos)
         
         intencion = analisis.get("intencion_detectada", "CONVERSAR")
         respuesta_bot = analisis.get("respuesta_cliente", "")
         
-        # 1. Recuperamos y actualizamos las variables y el historial en el JSON
-        datos = dict(cliente.datos_temporales)
+        # 4. Actualizamos las variables detectadas por el JSON
         if analisis.get("materia"): datos["materia"] = analisis.get("materia")
         if analisis.get("nivel"): datos["nivel"] = analisis.get("nivel")
         
@@ -77,7 +85,7 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
         datos["historial"] = datos["historial"][-10:]
         
         cliente.datos_temporales = datos
-        flag_modified(cliente, "datos_temporales")
+        flag_modified(cliente, "datos_temporales")  # Nos aseguramos de guardar la memoria y el nuevo contexto
         db.commit()
 
         if intencion == "CONVERSAR":
