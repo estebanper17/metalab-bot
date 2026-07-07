@@ -3,8 +3,11 @@ from sqlalchemy.orm import Session
 import models
 
 def obtener_horarios_disponibles(db: Session, dias_a_futuro: int = 7) -> list:
-    hoy_completo = datetime.now()
+    # AJUSTE DE ZONA HORARIA: Convertimos la hora UTC del servidor a la hora local (UTC-6)
+    hora_utc = datetime.utcnow()
+    hoy_completo = hora_utc - timedelta(hours=6)
     hoy_solo_fecha = hoy_completo.date()
+    
     slots_disponibles = []
     
     FECHA_CAMBIO_UNI = datetime(2026, 8, 10).date()
@@ -14,6 +17,8 @@ def obtener_horarios_disponibles(db: Session, dias_a_futuro: int = 7) -> list:
     for i in range(0, dias_a_futuro):
         fecha_evaluar = hoy_solo_fecha + timedelta(days=i)
         dia_semana = fecha_evaluar.weekday()
+        
+        # ... (Mantén el resto de tus reglas exactamente igual a partir de aquí) ...
         
         # Regla 1: Exclusión de Fines de Semana de Descanso
         dias_diferencia = (fecha_evaluar - FIN_SEMANA_DESCANSO_BASE).days
