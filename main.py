@@ -1,6 +1,6 @@
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Form, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -61,7 +61,11 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
         
         # 2. Recuperamos los datos temporales e inyectamos el estado real del calendario
         datos = dict(cliente.datos_temporales)
-        datos["calendario_disponible"] = horarios_legibles # <--- Gemini leerá esto instantáneamente
+        datos["calendario_disponible"] = horarios_legibles 
+        
+        # 👉 NUEVO: Darle a Gemini la fecha actual de México para que no se pierda
+        hora_local_mexico = datetime.utcnow() - timedelta(hours=6)
+        datos["fecha_actual_sistema"] = f"INFORMACIÓN DEL SISTEMA: Hoy es {hora_local_mexico.strftime('%d/%b')}"
         
         # 3. Ahora sí, llamamos a Gemini con los ojos abiertos
         analisis = analizar_mensaje_con_gemini(text_limpio, datos)
@@ -128,7 +132,12 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
             twiml.message(introduccion + menu_horarios)
             
             # CORRECCIÓN AQUÍ: Imprime el texto completo para validar el contexto
-            print(f"\n[DEBUG INTEGRACIÓN GEMINI - TRANSFERENCIA A CALENDARIO]:\n{introduccion}{menu_horarios}")
+            # Reemplaza tu actual print de debug por este:
+            print(f"\n[DEBUG CALENDARIO DETALLADO]")
+            print(f"Hora Servidor (UTC): {datetime.utcnow()}")
+            print(f"Hora Local (Ajustada): {datetime.utcnow() - timedelta(hours=6)}")
+            print(f"Slots generados: {[s.strftime('%H:%M') for s in slots]}")
+            print(f"Texto menú enviado a IA: {horarios_legibles}")
             return Response(content=str(twiml), media_type="application/xml")
 
     # =========================================================================
