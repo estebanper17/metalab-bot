@@ -75,19 +75,26 @@ reloj = BackgroundScheduler()
 reloj.start()
 
 def programar_recordatorios_clase(telefono_cliente: str, materia: str, fecha_hora_clase: datetime):
-    # Calculamos el disparo exacto 2 horas antes de la clase
-    tiempo_disparo = fecha_hora_clase - timedelta(hours=2)
+    # 1. Calculamos la hora de disparo en hora local (Puebla)
+    tiempo_disparo_local = fecha_hora_clase - timedelta(hours=2)
     hora_clase_int = fecha_hora_clase.hour
     fecha_texto = fecha_hora_clase.strftime('%d/%b a las %I:00 %p')
     
+    # 2. Obtenemos la hora actual real en México (UTC-6)
+    hora_actual_local = datetime.utcnow() - timedelta(hours=6)
+    
     # Regla de seguridad: Si agendan de emergencia a menos de 2 horas, dispara en 1 minuto
-    if tiempo_disparo < datetime.now():
-        tiempo_disparo = datetime.now() + timedelta(minutes=1)
+    if tiempo_disparo_local < hora_actual_local:
+        tiempo_disparo_local = hora_actual_local + timedelta(minutes=1)
+
+    # 3. TRADUCCIÓN AL SERVIDOR: Como APScheduler lee el reloj interno de Render (UTC),
+    # le sumamos 6 horas al tiempo de disparo para que el servidor lo detone en el momento correcto.
+    tiempo_disparo_servidor = tiempo_disparo_local + timedelta(hours=6)
 
     reloj.add_job(
         enviar_notificaciones_clase,
         trigger='date',
-        run_date=tiempo_disparo,
+        run_date=tiempo_disparo_servidor,
         args=[telefono_cliente, materia, hora_clase_int, fecha_texto]
     )
-    print(f"\n[RELOJ ACTIVADO] 🕒 Tarea en segundo plano programada para: {tiempo_disparo.strftime('%d/%b a las %I:%M:%S %p')}")
+    print(f"\n[RELOJ ACTIVADO] 🕒 Tarea programada en el servidor. El cliente la recibirá a las: {tiempo_disparo_local.strftime('%d/%b a las %I:%M:%S %p')} (Hora local)")
