@@ -188,7 +188,6 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
             # 3. ¡LA LLAVE DE SALIDA! Regresamos a modo conversacional
             cliente.estado_actual = "ESPERANDO_SERVICIO"
             cliente.datos_temporales = datos
-            from sqlalchemy.orm.attributes import flag_modified
             flag_modified(cliente, "datos_temporales")
             db.commit()
             
