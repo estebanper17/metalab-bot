@@ -99,7 +99,12 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
         elif intencion == "ATENCION_MANUAL":
             cliente.estado_actual = "ATENCION_MANUAL"
             db.commit()
-            twiml.message(respuesta_bot)
+            
+            # Blindaje: Si Gemini no generó respuesta, usamos esta por defecto
+            mensaje_manual = respuesta_bot if respuesta_bot.strip() else "¡Excelente! Un experto en el área revisará tu solicitud y se pondrá en contacto contigo por este medio a la brevedad.\n\n_(Si te equivocaste de opción o deseas otro servicio, simplemente escribe la palabra *Menú* para volver a empezar)._"
+            
+            twiml.message(mensaje_manual)
+            print(f"\n[DEBUG GEMINI - ATENCIÓN MANUAL]:\n{mensaje_manual}") # Ahora sí lo verás en consola
             
             # ALERTA INMEDIATA DE OTROS SERVICIOS
             enviar_alerta_telegram(
