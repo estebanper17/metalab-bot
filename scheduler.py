@@ -3,7 +3,11 @@ import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from twilio.rest import Client
+
+# 👉 NUEVO: Importamos el motor de tu base de datos actual
+from database import engine 
 
 load_dotenv() 
 
@@ -31,7 +35,7 @@ MEET_LINKS = {
 def enviar_notificaciones_clase(telefono_cliente: str, materia: str, hora_clase_int: int, fecha_texto: str):
     """Ejecuta el envío dual 2 horas antes de la sesión"""
     link_meet = MEET_LINKS.get(hora_clase_int, "https://meet.google.com/")
-    hora_exacta = fecha_texto.split(" a las ")[-1] # Extraemos solo la hora (ej. "02:00 PM")
+    hora_exacta = fecha_texto.split(" a las ")[-1]
     
     # 1. RECORDATORIO AL ALUMNO (VÍA WHATSAPP)
     try:
@@ -79,12 +83,27 @@ def enviar_alerta_10_min_telegram(materia: str, telefono_cliente: str, hora_clas
     except Exception as e:
         print(f"❌ Error enviando Telegram 10 min: {e}")
 
-# Inicializamos el reloj en segundo plano
-reloj = BackgroundScheduler()
+# ====================================================================
+# CONFIGURACIÓN DEL RELOJ INMORTAL (PERSISTENCIA EN SUPABASE)
+# ====================================================================
+jobstores = {
+    # Esto creará automáticamente una tabla llamada 'apscheduler_jobs' en tu Supabase
+    'default': SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
+}
+
+job_defaults = {
+    # Si Render se está reiniciando justo a la hora de la alarma, 
+    # le damos 15 minutos de tolerancia para que dispare en cuanto despierte.
+    'misfire_grace_time': 900,
+    'coalesce': True, # Agrupa ejecuciones perdidas en una sola para no mandar spam
+    'max_instances': 1
+}
+
+# Inicializamos el reloj conectado a la base de datos
+reloj = BackgroundScheduler(jobstores=jobstores, job_defaults=job_defaults)
 reloj.start()
 
 def programar_recordatorios_clase(telefono_cliente: str, materia: str, fecha_hora_clase: datetime):
-    # Tiempos en hora local
     tiempo_disparo_2h_local = fecha_hora_clase - timedelta(hours=2)
     tiempo_disparo_10m_local = fecha_hora_clase - timedelta(minutes=10)
     hora_clase_int = fecha_hora_clase.hour
@@ -92,18 +111,15 @@ def programar_recordatorios_clase(telefono_cliente: str, materia: str, fecha_hor
     
     hora_actual_local = datetime.utcnow() - timedelta(hours=6)
     
-    # Reglas de seguridad si agendan de emergencia
     if tiempo_disparo_2h_local < hora_actual_local:
         tiempo_disparo_2h_local = hora_actual_local + timedelta(minutes=1)
         
     if tiempo_disparo_10m_local < hora_actual_local:
         tiempo_disparo_10m_local = hora_actual_local + timedelta(minutes=2)
 
-    # TRADUCCIÓN AL SERVIDOR (UTC)
     tiempo_disparo_2h_servidor = tiempo_disparo_2h_local + timedelta(hours=6)
     tiempo_disparo_10m_servidor = tiempo_disparo_10m_local + timedelta(hours=6)
 
-    # Programar Trabajo 1: Alerta 2 horas
     reloj.add_job(
         enviar_notificaciones_clase,
         trigger='date',
@@ -111,7 +127,6 @@ def programar_recordatorios_clase(telefono_cliente: str, materia: str, fecha_hor
         args=[telefono_cliente, materia, hora_clase_int, fecha_texto]
     )
     
-    # Programar Trabajo 2: Alerta 10 minutos (Solo Telegram)
     reloj.add_job(
         enviar_alerta_10_min_telegram,
         trigger='date',
@@ -119,4 +134,4 @@ def programar_recordatorios_clase(telefono_cliente: str, materia: str, fecha_hor
         args=[materia, telefono_cliente, hora_clase_int, fecha_texto]
     )
     
-    print(f"\n[RELOJ ACTIVADO] 🕒 Tareas programadas:\n - Alerta de 2 hrs a las: {tiempo_disparo_2h_local.strftime('%I:%M %p')}\n - Alerta de 10 min a las: {tiempo_disparo_10m_local.strftime('%I:%M %p')}")
+    print(f"\n[RELOJ ACTIVADO] 🕒 Tareas guardadas en Supabase:\n - Alerta de 2 hrs a las: {tiempo_disparo_2h_local.strftime('%I:%M %p')}\n - Alerta de 10 min a las: {tiempo_disparo_10m_local.strftime('%I:%M %p')}")
