@@ -11,10 +11,10 @@ import models
 from calendar_engine import obtener_horarios_disponibles, formatear_slots_para_whatsapp
 from scheduler import programar_recordatorios_clase
 from gemini_service import analizar_mensaje_con_gemini
-from dotenv import load_dotenv # <--- Asegúrate de tener este import
+from dotenv import load_dotenv 
 from sqlalchemy.orm.attributes import flag_modified
 
-load_dotenv() # Esto carga las variables del archivo .env
+load_dotenv() 
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -55,15 +55,19 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
     # FASE CONVERSACIONAL INTEGRADA CON GEMINI (INICIO / ESPERANDO_SERVICIO)
     # =========================================================================
     if estado_actual in ["INICIO", "ESPERANDO_SERVICIO"]:
-        # 1. TRAER LOS HORARIOS REALES ANTES DE QUE GEMINI GENERE SU RESPUESTA
-        slots_disponibles = obtener_horarios_disponibles(db, dias_a_futuro=7)
-        horarios_legibles = [slot.strftime('%d/%b a las %I:00 %p') for slot in slots_disponibles[:8]]
-        
-        # 2. Recuperamos los datos temporales e inyectamos el estado real del calendario
+        # 1. Recuperamos los datos temporales y extraemos la preferencia de horario si ya existe
         datos = dict(cliente.datos_temporales)
+        preferencia_actual = datos.get("preferencia_horario")
+        
+        # 2. TRAER LOS HORARIOS REALES (Filtrados por preferencia si la hay)
+        slots_disponibles = obtener_horarios_disponibles(db, dias_a_futuro=7, preferencia=preferencia_actual)
+        
+        # 👉 SÚPER VISIÓN: Le pasamos hasta 30 opciones a Gemini para que tenga contexto de varios días
+        horarios_legibles = [slot.strftime('%d/%b a las %I:00 %p') for slot in slots_disponibles[:30]]
+        
         datos["calendario_disponible"] = horarios_legibles 
         
-        # 👉 NUEVO: Darle a Gemini la fecha actual de México para que no se pierda
+        # Darle a Gemini la fecha actual de México para que no se pierda
         hora_local_mexico = datetime.utcnow() - timedelta(hours=6)
         datos["fecha_actual_sistema"] = f"INFORMACIÓN DEL SISTEMA: Hoy es {hora_local_mexico.strftime('%d/%b')}"
         
@@ -76,6 +80,7 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
         # 4. Actualizamos las variables detectadas por el JSON
         if analisis.get("materia"): datos["materia"] = analisis.get("materia")
         if analisis.get("nivel"): datos["nivel"] = analisis.get("nivel")
+        if analisis.get("preferencia_horario"): datos["preferencia_horario"] = analisis.get("preferencia_horario")
         
         # Inicializamos el arreglo de historial si es un cliente nuevo
         if "historial" not in datos:
@@ -108,7 +113,7 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
             mensaje_manual = respuesta_bot if respuesta_bot.strip() else "¡Excelente! Un experto en el área revisará tu solicitud y se pondrá en contacto contigo por este medio a la brevedad.\n\n_(Si te equivocaste de opción o deseas otro servicio, simplemente escribe la palabra *Menú* para volver a empezar)._"
             
             twiml.message(mensaje_manual)
-            print(f"\n[DEBUG GEMINI - ATENCIÓN MANUAL]:\n{mensaje_manual}") # Ahora sí lo verás en consola
+            print(f"\n[DEBUG GEMINI - ATENCIÓN MANUAL]:\n{mensaje_manual}") 
             
             # ALERTA INMEDIATA DE OTROS SERVICIOS
             enviar_alerta_telegram(
@@ -120,24 +125,26 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
             return Response(content=str(twiml), media_type="application/xml")
             
         elif intencion == "AGENDAR_TUTORIA":
-            slots = obtener_horarios_disponibles(db, dias_a_futuro=7)
-            datos["slots_ofrecidos"] = [slot.isoformat() for slot in slots[:8]]
+            preferencia_actual = cliente.datos_temporales.get("preferencia_horario")
+            slots = obtener_horarios_disponibles(db, dias_a_futuro=7, preferencia=preferencia_actual)
+            
+            # 👉 UX CLIENTE: Guardamos solo los primeros 10 espacios filtrados para presentarlos en WhatsApp
+            datos["slots_ofrecidos"] = [slot.isoformat() for slot in slots[:10]]
             cliente.datos_temporales = datos
             cliente.estado_actual = "TUTORIAS_HORARIO"
             db.commit()
             
             introduccion = f"{respuesta_bot}\n\n"
-            menu_horarios = formatear_slots_para_whatsapp(slots)
+            menu_horarios = formatear_slots_para_whatsapp(slots[:10])
             
             twiml.message(introduccion + menu_horarios)
             
-            # CORRECCIÓN AQUÍ: Imprime el texto completo para validar el contexto
             print(f"\n[DEBUG INTEGRACIÓN GEMINI - TRANSFERENCIA A CALENDARIO]:\n{introduccion}{menu_horarios}")
             print(f"\n[DEBUG CALENDARIO DETALLADO]")
             print(f"Hora Servidor (UTC): {datetime.utcnow()}")
             print(f"Hora Local (Ajustada): {datetime.utcnow() - timedelta(hours=6)}")
-            print(f"Slots generados: {[s.strftime('%H:%M') for s in slots]}")
-            print(f"Texto menú enviado a IA: {horarios_legibles}")
+            print(f"Slots generados (Total): {[s.strftime('%H:%M') for s in slots]}")
+            print(f"Texto menú mostrado al cliente (Max 10): {horarios_legibles[:10]}")
             return Response(content=str(twiml), media_type="application/xml")
 
     # =========================================================================
@@ -186,28 +193,23 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
             )
             twiml.message(respuesta)
 
-            # ---> AGREGA ESTA LÍNEA PARA VERLO EN CONSOLA <---
             print(f"\n[DEBUG - CONFIRMACIÓN AL CLIENTE (BLOQUEADA POR TWILIO)]:\n{respuesta}")
             
             programar_recordatorios_clase(From, nueva_cita.materia, fecha_hora_dt)
             
         else:
             # VÁLVULA DE ESCAPE: El usuario respondió con texto en lugar de un número
-            
-            # 1. Le decimos a Gemini la verdad sobre los horarios para que no alucine
             horarios_legibles = [datetime.fromisoformat(s).strftime('%d/%b a las %I:00 %p') for s in slots_ofrecidos]
-            datos["contexto_calendario"] = f"NOTA DEL SISTEMA: El calendario real solo tiene estos espacios: {horarios_legibles}. Explícale esto al usuario de forma amable."
+            datos["contexto_calendario"] = f"NOTA DEL SISTEMA: El calendario real solo tiene estos espacios filtrados para el usuario: {horarios_legibles}. Explícale esto de forma amable."
             
             analisis = analizar_mensaje_con_gemini(text_limpio, datos)
             respuesta_bot = analisis.get("respuesta_cliente", "")
             
-            # 2. Guardamos la memoria
             if "historial" not in datos: datos["historial"] = []
             datos["historial"].append({"autor": "Usuario", "texto": text_limpio})
             datos["historial"].append({"autor": "Asistente", "texto": respuesta_bot})
             datos["historial"] = datos["historial"][-10:]
             
-            # 3. ¡LA LLAVE DE SALIDA! Regresamos a modo conversacional
             cliente.estado_actual = "ESPERANDO_SERVICIO"
             cliente.datos_temporales = datos
             flag_modified(cliente, "datos_temporales")
@@ -217,7 +219,6 @@ async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Ses
             print(f"\n[DEBUG GEMINI - VÁLVULA DE ESCAPE]:\n{respuesta_bot}")
             
             return Response(content=str(twiml), media_type="application/xml")
-
 
     elif estado_actual == "ATENCION_MANUAL":
         return Response(status_code=200)

@@ -38,10 +38,11 @@ LÍMITES DEL SISTEMA:
 
 ESTRUCTURA DE RESPUESTA JSON:
 {
-    "respuesta_cliente": "Tu mensaje empático y profesional.",
+    "respuesta_cliente": "Tu mensaje empático y profesional, siguiendo la ruta correspondiente al servicio.",
     "intencion_detectada": "CONVERSAR" o "AGENDAR_TUTORIA" o "ATENCION_MANUAL",
     "materia": "Matemáticas" o "Física" o "Consultoría" o "Traducción" o null,
-    "nivel": "Secundaria" o "Bachillerato" o "Universidad" o "Profesional" o null
+    "nivel": "Secundaria" o "Bachillerato" o "Universidad" o "Profesional" o null,
+    "preferencia_horario": "mañana" o "tarde" o null
 }
 """
 

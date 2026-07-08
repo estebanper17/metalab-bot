@@ -44,6 +44,12 @@ def obtener_horarios_disponibles(db: Session, dias_a_futuro: int = 7) -> list:
             if dt_slot <= hoy_completo:
                 continue
             
+            # 👉 NUEVO FILTRO UX: Descartar según preferencia de mañana o tarde
+            if preferencia == "mañana" and dt_slot.hour >= 14: # Consideramos tarde a partir de las 2 PM
+                continue
+            if preferencia == "tarde" and dt_slot.hour < 14:
+                continue
+
             slot_ocupado = db.query(models.CitaTutoria).filter(
                 models.CitaTutoria.fecha_hora_inicio == dt_slot,
                 models.CitaTutoria.estado == "CONFIRMADA"
@@ -63,7 +69,7 @@ def formatear_slots_para_whatsapp(slots: list) -> str:
     texto += "Por favor, responde con el *número* de la opción que prefieras:\n\n"
     
     # Limitamos a mostrar máximo 8 opciones para no saturar la pantalla de WhatsApp
-    for indice, slot in enumerate(slots[:8], start=1):
+    for indice, slot in enumerate(slots[:10], start=1):
         # Formato amigable en español: "Lunes 06/Jul - 04:00 PM"
         dias_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
         nombre_dia = dias_es[slot.weekday()]
