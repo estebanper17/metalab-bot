@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 import models
 
-def obtener_horarios_disponibles(db: Session, dias_a_futuro: int = 7) -> list:
+def obtener_horarios_disponibles(db: Session, dias_a_futuro: int = 7, preferencia: str = None) -> list:
     # AJUSTE DE ZONA HORARIA: Convertimos la hora UTC del servidor a la hora local (UTC-6)
     hora_utc = datetime.utcnow()
     hoy_completo = hora_utc - timedelta(hours=6)
@@ -13,12 +13,10 @@ def obtener_horarios_disponibles(db: Session, dias_a_futuro: int = 7) -> list:
     FECHA_CAMBIO_UNI = datetime(2026, 8, 10).date()
     FIN_SEMANA_DESCANSO_BASE = datetime(2026, 7, 18).date()
 
-    # CAMBIO CRÍTICO: Empezamos en 0 (Hoy)
+    # Empezamos en 0 (Hoy)
     for i in range(0, dias_a_futuro):
         fecha_evaluar = hoy_solo_fecha + timedelta(days=i)
         dia_semana = fecha_evaluar.weekday()
-        
-        # ... (Mantén el resto de tus reglas exactamente igual a partir de aquí) ...
         
         # Regla 1: Exclusión de Fines de Semana de Descanso
         dias_diferencia = (fecha_evaluar - FIN_SEMANA_DESCANSO_BASE).days
@@ -36,20 +34,20 @@ def obtener_horarios_disponibles(db: Session, dias_a_futuro: int = 7) -> list:
             elif dia_semana == 5: hora_inicio, hora_fin = 9, 19
             else: hora_inicio, hora_fin = 10, 15
 
-        # Regla 3: Validación contra Ocupación Real y El Pasado
+        # Regla 3: Validación contra Ocupación Real, El Pasado y Preferencias UX
         for hora in range(hora_inicio, hora_fin):
             dt_slot = datetime.combine(fecha_evaluar, datetime.min.time()).replace(hour=hora)
             
-            # NUEVO FILTRO: Si la hora generada ya pasó el día de hoy, la ignoramos
+            # FILTRO 1: Si la hora generada ya pasó el día de hoy, la ignoramos
             if dt_slot <= hoy_completo:
                 continue
-            
-            # 👉 NUEVO FILTRO UX: Descartar según preferencia de mañana o tarde
-            if preferencia == "mañana" and dt_slot.hour >= 14: # Consideramos tarde a partir de las 2 PM
-                continue
-            if preferencia == "tarde" and dt_slot.hour < 14:
-                continue
 
+            # 👉 FILTRO UX: Descartar según preferencia de mañana o tarde
+            if preferencia == "mañana" and dt_slot.hour >= 14: # Consideramos tarde a partir de las 2 PM (14:00)
+                continue
+            if preferencia == "tarde" and dt_slot.hour < 14: # Consideramos mañana antes de las 2 PM
+                continue
+            
             slot_ocupado = db.query(models.CitaTutoria).filter(
                 models.CitaTutoria.fecha_hora_inicio == dt_slot,
                 models.CitaTutoria.estado == "CONFIRMADA"
@@ -63,19 +61,16 @@ def obtener_horarios_disponibles(db: Session, dias_a_futuro: int = 7) -> list:
 def formatear_slots_para_whatsapp(slots: list) -> str:
     """Convierte la lista de objetos datetime en un menú legible para el cliente."""
     if not slots:
-        return "Lo siento, no tengo horarios disponibles en este momento. Escribe *Menú* para regresar."
+        return "Lo siento, no tengo horarios disponibles para esa preferencia. Escribe *Menú* para regresar y elegir otra opción."
         
     texto = "🗓️ *Horarios Disponibles para esta semana:*\n"
     texto += "Por favor, responde con el *número* de la opción que prefieras:\n\n"
     
-    # Limitamos a mostrar máximo 8 opciones para no saturar la pantalla de WhatsApp
+    # Limitamos a mostrar máximo 10 opciones para no saturar la pantalla de WhatsApp
     for indice, slot in enumerate(slots[:10], start=1):
-        # Formato amigable en español: "Lunes 06/Jul - 04:00 PM"
         dias_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
         nombre_dia = dias_es[slot.weekday()]
         fecha_str = slot.strftime('%d/%b')
-        
-        # Formato de hora de 12 horas con AM/PM
         hora_12 = slot.strftime('%I:00 %p')
         
         texto += f"*{indice}.* {nombre_dia} {fecha_str} a las {hora_12}\n"
