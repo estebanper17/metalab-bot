@@ -32,3 +32,7 @@ La solución está diseñada para optimizar los flujos de conversión de cliente
    ```bash
    git clone [https://github.com/tu-usuario/metalab-bot-api.git](https://github.com/tu-usuario/metalab-bot-api.git)
    cd metalab-bot-api
+.
+
+   ---
+*Developed by Esteban Pérez - Applied Physics & Data Science*
