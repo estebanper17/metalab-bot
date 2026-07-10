@@ -29,6 +29,13 @@ def enviar_alerta_telegram(mensaje: str):
     try: requests.post(url, json=payload)
     except Exception as e: print(f"❌ Error Telegram: {e}")
 
+# =========================================================================
+# RUTA DE "LATIDO" PARA MANTENER EL SERVIDOR DESPIERTO EN RENDER
+# =========================================================================
+@app.get("/ping")
+async def keep_alive():
+    return {"status": "ok", "mensaje": "MetaLab Analytics Bot está despierto y operando"}
+
 @app.post("/webhook")
 async def whatsapp_webhook(Body: str = Form(...), From: str = Form(...), db: Session = Depends(get_db)):
     text_limpio = Body.strip()
